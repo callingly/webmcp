@@ -464,21 +464,33 @@
      *
      * The API moved from navigator.modelContext to document.modelContext, and
      * some agents inject their own shim after page load — so try both, and
-     * keep looking for a short while before giving up.
+     * keep looking.
+     *
+     * One unconditional poll does all of it. There is no event for a context
+     * appearing, being replaced, or a registration failing, and every attempt
+     * to stop looking once things seemed settled left some ordering where
+     * nothing was watching any more: a shim injected after a retry budget ran
+     * out, a registration that stayed pending and rejected late, a context
+     * swapped for another after a clean start. So the poll simply runs for the
+     * life of the page, and register() is what decides whether there is
+     * anything to do — a pair of identity checks when there is not.
      * ---------------------------------------------------------------- */
+
+    var FAST_INTERVAL_MS = 500;
+    var SLOW_INTERVAL_MS = 2000;
+    var FAST_TICKS = 20;
+    var MAX_FAILURES = 3;
 
     var controller = new AbortController();
 
-    // Per tool: undefined = not registered, 'pending' = registerTool in
-    // flight, 'done' = it resolved. registerTool is async and can reject, so a
-    // tool only counts as registered once its own promise settles — otherwise
-    // one rejection would look like a clean registration and stop the retries
-    // that could still recover it.
+    // Per tool, the last registration attempt: which context it was made
+    // against, whether registerTool has resolved ('done'), rejected
+    // ('failed') or is still in flight ('pending'), and how many times it has
+    // rejected on that context. registerTool is async and can reject, so a
+    // tool only counts as registered once its own promise resolves.
     var state = {};
-    var attempts = 0;
-    var restarts = 0;
+    var ticks = 0;
     var timer = null;
-    var watcher = null;
 
     function modelContext() {
         return (typeof document !== 'undefined' && document.modelContext)
@@ -500,28 +512,25 @@
     }
 
     /**
-     * Drop a tool that failed to register, and make sure something is still
-     * trying: registerTool can stay pending past the retry window and only
-     * then reject, by which point the timer has stopped and its budget is
-     * spent, so the tool would be gone for the life of the page.
-     *
-     * Only such a late rejection buys a fresh window. One that lands while
-     * the timer is still running is already covered by it, and spending the
-     * allowance on those would leave nothing for the late one that needs it.
-     * The cap stops an implementation that always rejects from spinning.
+     * Record a failed registration. The next poll retries it, up to MAX_FAILURES
+     * times against the same context — enough to ride out a shim that is not
+     * ready yet, without warning every couple of seconds for the life of the
+     * page when an implementation simply refuses our tools. A replacement
+     * context starts the count over, because it may well accept them.
      */
-    function forget(tool, error) {
-        state[tool.name] = undefined;
+    function recordFailure(entry, tool, error) {
+        entry.status = 'failed';
+        entry.failures++;
+
         console.warn('[callingly] Could not register ' + tool.name + ':', error);
-
-        if (!timer && restarts < 3) {
-            restarts++;
-            attempts = 0;
-        }
-
-        scheduleRetries();
     }
 
+    /**
+     * Register anything that is not already registered against the context
+     * that is live right now. Called on every poll, so it has to be cheap and
+     * safe to repeat: when nothing has changed it does one identity check per
+     * tool and returns.
+     */
     function register() {
         var context = modelContext();
 
@@ -531,24 +540,29 @@
 
         tools.forEach(function (tool) {
             var existing = state[tool.name];
+            var sameContext = existing && existing.context === context;
 
-            // Skip only what is already done or in flight against *this*
-            // context. A replacement context — a native implementation landing
-            // over an extension's, or document.modelContext appearing after we
-            // settled for navigator's — needs its own registration, and
-            // treating a pending one as good enough would leave the tool on
-            // the obsolete context for the life of the page.
-            if (existing && existing.context === context) {
+            // Leave alone what is done or still in flight against *this*
+            // context, and what has already failed on it too many times. A
+            // replacement context — a native implementation landing over an
+            // extension's, or document.modelContext appearing after we settled
+            // for navigator's — always needs its own registration: a tool left
+            // on the superseded context is not reachable.
+            if (sameContext && (existing.status !== 'failed' || existing.failures >= MAX_FAILURES)) {
                 return;
             }
 
-            var entry = { context: context, status: 'pending' };
+            var entry = {
+                context: context,
+                status: 'pending',
+                failures: sameContext ? existing.failures : 0
+            };
 
             state[tool.name] = entry;
 
-            // A settled promise from a superseded registration must not touch
-            // state that has moved on: it would either report a tool as live
-            // on the wrong context or drop a good registration.
+            // A settled promise from a superseded attempt must not touch state
+            // that has moved on: it would either report a tool as live on the
+            // wrong context or discard a good registration.
             var isCurrent = function () {
                 return state[tool.name] === entry;
             };
@@ -557,24 +571,15 @@
                 Promise.resolve(context.registerTool(tool, { signal: controller.signal })).then(function () {
                     if (isCurrent()) {
                         entry.status = 'done';
-
-                        // Wherever the last tool lands — inside the retry
-                        // window or long after it gave up — that is the moment
-                        // the replacement watch has to start. Hanging it off
-                        // the retry timer instead missed a registration that
-                        // resolved once the timer had stopped.
-                        if (allRegistered()) {
-                            watchForReplacement();
-                        }
                     }
                 }, function (error) {
                     if (isCurrent()) {
-                        forget(tool, error);
+                        recordFailure(entry, tool, error);
                     }
                 });
             } catch (error) {
                 if (isCurrent()) {
-                    forget(tool, error);
+                    recordFailure(entry, tool, error);
                 }
             }
         });
@@ -582,40 +587,22 @@
         return allRegistered();
     }
 
-    function scheduleRetries() {
-        if (timer || attempts >= 20) {
-            return;
+    function poll() {
+        register();
+
+        // Quick while the page is still settling, since an agent's shim
+        // usually lands within a few seconds of load, then slow and steady for
+        // as long as the page is open. register() is nearly free when nothing
+        // has changed, and nothing else can tell us a context arrived or was
+        // swapped out.
+        if (++ticks === FAST_TICKS) {
+            clearInterval(timer);
+            timer = setInterval(poll, SLOW_INTERVAL_MS);
         }
-
-        timer = setInterval(function () {
-            if (register() || ++attempts >= 20) {
-                clearInterval(timer);
-                timer = null;
-            }
-        }, 500);
     }
 
-    /**
-     * A context can also be swapped out *after* everything registered, and
-     * there is no event to tell us. So once we are registered somewhere, keep
-     * a slow watch: register() is a pair of identity checks while nothing has
-     * changed, and re-registers the moment something has.
-     *
-     * Only ever started once every tool is registered, so pages in browsers
-     * with no WebMCP at all — nearly all of them — give up after the retry
-     * budget and leave no timer behind.
-     */
-    function watchForReplacement() {
-        if (watcher) {
-            return;
-        }
-
-        watcher = setInterval(register, 2000);
-    }
-
-    if (!register()) {
-        scheduleRetries();
-    }
+    register();
+    timer = setInterval(poll, FAST_INTERVAL_MS);
 
     window.callingly = {
         config: config,
@@ -629,16 +616,11 @@
             controller.abort();
             state = {};
 
-            // Stop watching, or the next tick would register all over again
+            // Stop polling, or the next tick would register all over again
             // against the signal we just aborted.
             if (timer) {
                 clearInterval(timer);
                 timer = null;
-            }
-
-            if (watcher) {
-                clearInterval(watcher);
-                watcher = null;
             }
         }
     };
