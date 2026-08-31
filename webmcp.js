@@ -234,7 +234,7 @@
                 '<div class="row"><button type="button" class="no">Not now</button>' +
                 '<button type="button" class="yes">Call me</button></div></div>';
 
-            root.querySelector('.num').textContent = lead.phone;
+            root.querySelector('.num').textContent = formatPhone(lead.phone);
 
             var settled = false;
 
@@ -278,6 +278,28 @@
             document.body.appendChild(host);
             root.querySelector('.yes').focus();
         });
+    }
+
+    /**
+     * Group a number for display so the visitor can check at a glance that it
+     * is theirs — the one thing the confirmation card exists to let them do.
+     * Only NANP numbers have a grouping worth assuming; anything else is shown
+     * exactly as it was given rather than guessed at. Display only: what gets
+     * sent is always the number the caller passed.
+     */
+    function formatPhone(value) {
+        var raw = String(value == null ? '' : value).trim();
+        var digits = raw.replace(/[^0-9]/g, '');
+
+        if (raw.charAt(0) === '+' && digits.length === 11 && digits.charAt(0) === '1') {
+            return '+1 ' + digits.slice(1, 4) + ' ' + digits.slice(4, 7) + ' ' + digits.slice(7);
+        }
+
+        if (raw.charAt(0) !== '+' && digits.length === 10) {
+            return digits.slice(0, 3) + ' ' + digits.slice(3, 6) + ' ' + digits.slice(6);
+        }
+
+        return raw;
     }
 
     function escapeHtml(value) {
@@ -422,7 +444,7 @@
                     comments: input.reason || null,
                     consent: true
                 }, { signal: signal }).then(function (data) {
-                    return text(data.message + ' (Callingly is calling ' + data.phone_number + '.)');
+                    return text(data.message + ' (Callingly is calling ' + formatPhone(data.phone_number) + '.)');
                 }).catch(function (error) {
                     if (error.declined) {
                         return failure(
