@@ -535,6 +535,15 @@
                 Promise.resolve(context.registerTool(tool, { signal: controller.signal })).then(function () {
                     if (isCurrent()) {
                         entry.status = 'done';
+
+                        // Wherever the last tool lands — inside the retry
+                        // window or long after it gave up — that is the moment
+                        // the replacement watch has to start. Hanging it off
+                        // the retry timer instead missed a registration that
+                        // resolved once the timer had stopped.
+                        if (allRegistered()) {
+                            watchForReplacement();
+                        }
                     }
                 }, function (error) {
                     if (isCurrent()) {
@@ -557,15 +566,7 @@
         }
 
         timer = setInterval(function () {
-            if (register()) {
-                clearInterval(timer);
-                timer = null;
-                watchForReplacement();
-
-                return;
-            }
-
-            if (++attempts >= 20) {
+            if (register() || ++attempts >= 20) {
                 clearInterval(timer);
                 timer = null;
             }
@@ -578,7 +579,7 @@
      * a slow watch: register() is a pair of identity checks while nothing has
      * changed, and re-registers the moment something has.
      *
-     * Only ever started after a successful registration. Pages in browsers
+     * Only ever started once every tool is registered, so pages in browsers
      * with no WebMCP at all — nearly all of them — give up after the retry
      * budget and leave no timer behind.
      */
@@ -590,9 +591,7 @@
         watcher = setInterval(register, 2000);
     }
 
-    if (register()) {
-        watchForReplacement();
-    } else {
+    if (!register()) {
         scheduleRetries();
     }
 
