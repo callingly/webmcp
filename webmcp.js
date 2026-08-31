@@ -464,8 +464,15 @@
     }
 
     function allRegistered() {
-        return tools.every(function (tool) {
-            return state[tool.name] === 'done';
+        var context = modelContext();
+
+        // Registered means registered with the context that is live *now*. A
+        // tool sitting on a context that has since been replaced is not
+        // reachable, so it does not count.
+        return !!context && tools.every(function (tool) {
+            var entry = state[tool.name];
+
+            return entry && entry.status === 'done' && entry.context === context;
         });
     }
 
@@ -500,20 +507,43 @@
         }
 
         tools.forEach(function (tool) {
-            if (state[tool.name]) {
+            var existing = state[tool.name];
+
+            // Skip only what is already done or in flight against *this*
+            // context. A replacement context — a native implementation landing
+            // over an extension's, or document.modelContext appearing after we
+            // settled for navigator's — needs its own registration, and
+            // treating a pending one as good enough would leave the tool on
+            // the obsolete context for the life of the page.
+            if (existing && existing.context === context) {
                 return;
             }
 
-            state[tool.name] = 'pending';
+            var entry = { context: context, status: 'pending' };
+
+            state[tool.name] = entry;
+
+            // A settled promise from a superseded registration must not touch
+            // state that has moved on: it would either report a tool as live
+            // on the wrong context or drop a good registration.
+            var isCurrent = function () {
+                return state[tool.name] === entry;
+            };
 
             try {
                 Promise.resolve(context.registerTool(tool, { signal: controller.signal })).then(function () {
-                    state[tool.name] = 'done';
+                    if (isCurrent()) {
+                        entry.status = 'done';
+                    }
                 }, function (error) {
-                    forget(tool, error);
+                    if (isCurrent()) {
+                        forget(tool, error);
+                    }
                 });
             } catch (error) {
-                forget(tool, error);
+                if (isCurrent()) {
+                    forget(tool, error);
+                }
             }
         });
 
