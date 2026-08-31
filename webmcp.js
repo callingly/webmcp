@@ -456,6 +456,7 @@
     var attempts = 0;
     var restarts = 0;
     var timer = null;
+    var watcher = null;
 
     function modelContext() {
         return (typeof document !== 'undefined' && document.modelContext)
@@ -502,7 +503,7 @@
     function register() {
         var context = modelContext();
 
-        if (!context || typeof context.registerTool !== 'function') {
+        if (controller.signal.aborted || !context || typeof context.registerTool !== 'function') {
             return false;
         }
 
@@ -556,14 +557,42 @@
         }
 
         timer = setInterval(function () {
-            if (register() || ++attempts >= 20) {
+            if (register()) {
+                clearInterval(timer);
+                timer = null;
+                watchForReplacement();
+
+                return;
+            }
+
+            if (++attempts >= 20) {
                 clearInterval(timer);
                 timer = null;
             }
         }, 500);
     }
 
-    if (!register()) {
+    /**
+     * A context can also be swapped out *after* everything registered, and
+     * there is no event to tell us. So once we are registered somewhere, keep
+     * a slow watch: register() is a pair of identity checks while nothing has
+     * changed, and re-registers the moment something has.
+     *
+     * Only ever started after a successful registration. Pages in browsers
+     * with no WebMCP at all — nearly all of them — give up after the retry
+     * budget and leave no timer behind.
+     */
+    function watchForReplacement() {
+        if (watcher) {
+            return;
+        }
+
+        watcher = setInterval(register, 2000);
+    }
+
+    if (register()) {
+        watchForReplacement();
+    } else {
         scheduleRetries();
     }
 
@@ -578,6 +607,18 @@
         unregister: function () {
             controller.abort();
             state = {};
+
+            // Stop watching, or the next tick would register all over again
+            // against the signal we just aborted.
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+
+            if (watcher) {
+                clearInterval(watcher);
+                watcher = null;
+            }
         }
     };
 })();
