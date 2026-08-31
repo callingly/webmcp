@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Callingly WebMCP demo</title>
+<style>
+  :root {
+    --teal: #167296;
+    --dark: #0e2d3e;
+    --cyan: #24a9df;
+    --line: #e4e7eb;
+    --muted: #667085;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1d2939;
+    background: #fff;
+  }
+  header { background: var(--dark); color: #fff; padding: 56px 24px; text-align: center; }
+  header p.eyebrow { margin: 0 0 12px; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: #35b7db; font-weight: 700; }
+  header h1 { margin: 0 0 16px; font-size: 34px; line-height: 1.2; }
+  header p.sub { margin: 0 auto; max-width: 640px; color: rgba(255,255,255,.8); }
+  main { max-width: 800px; margin: 0 auto; padding: 48px 24px 80px; }
+  section { margin-bottom: 56px; }
+  h2 { font-size: 22px; margin: 0 0 12px; color: var(--dark); }
+  code { background: #f2f4f7; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .panel { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel-head { background: #f9fafb; border-bottom: 1px solid var(--line); padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .panel ul, .panel ol { list-style: none; margin: 0; padding: 0; }
+  .panel li { padding: 12px 16px; border-bottom: 1px solid #f2f4f7; font-size: 14px; }
+  .panel li:last-child { border-bottom: 0; }
+  .panel li code { background: none; padding: 0; color: var(--teal); font-weight: 700; }
+  .muted { color: var(--muted); }
+  pre { background: #f9fafb; border-radius: 6px; padding: 10px 12px; margin: 8px 0 0; font-size: 12px; overflow-x: auto; color: #344054; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .stamp { flex: 0 0 auto; font-size: 11px; color: #98a2b3; }
+  .pill { border-radius: 999px; padding: 5px 12px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: #f2f4f7; color: var(--muted); }
+  .pill.live { background: var(--teal); color: #fff; }
+  .pill.warn { background: #fef0c7; color: #b54708; }
+  .prompts { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+  .prompts div { border: 1px solid var(--line); background: #f9fafb; border-radius: 8px; padding: 12px 14px; font-size: 14px; font-style: italic; }
+  button { border: 0; border-radius: 6px; padding: 11px 20px; font-size: 15px; font-weight: 600; color: #fff; cursor: pointer; }
+  button.primary { background: var(--teal); }
+  button.secondary { background: var(--cyan); }
+  input { border: 1px solid #d0d5dd; border-radius: 6px; padding: 10px 12px; font-size: 14px; width: 100%; }
+  .fields { display: grid; gap: 10px; grid-template-columns: 1fr 1fr auto; margin-top: 18px; }
+  .snippet { background: var(--dark); color: #fff; border-radius: 10px; padding: 18px; font-size: 13px; overflow-x: auto; }
+  @media (max-width: 640px) { .prompts, .fields { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">Live WebMCP demo</p>
+  <h1>Stop filling in the form.<br />Ask your agent to get sales on the phone.</h1>
+  <p class="sub">
+    This page registers two WebMCP tools. An AI agent browsing it can check when the sales
+    team is actually free and &mdash; with your say-so &mdash; have a rep call you within a
+    minute or two.
+  </p>
+</header>
+
+<main>
+  <section>
+    <h2>Try it</h2>
+    <ol style="padding-left: 20px; margin: 0 0 20px;">
+      <li>Open this page in <strong>ChatGPT's in-app browser</strong>, or <strong>Chrome 149+</strong> with <code>chrome://flags/#enable-webmcp-testing</code> enabled.</li>
+      <li>Ask your agent one of these.</li>
+      <li>Confirm the call when the page asks.</li>
+    </ol>
+    <div class="prompts">
+      <div>"Is the sales team available to talk right now?"</div>
+      <div>"When is the earliest I could speak to someone?"</div>
+      <div>"Have someone call me on +1 415 555 0134 about pricing."</div>
+      <div>"I need a human on the line, not a chatbot."</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="row" style="margin-bottom: 12px;">
+      <h2 style="margin: 0;">Agent console</h2>
+      <span class="pill" id="status">checking&hellip;</span>
+    </div>
+    <p class="muted" style="margin-top: 0; font-size: 14px;">
+      Every tool call an agent makes shows up here, with its arguments and what it returned.
+    </p>
+
+    <div class="panel" style="margin-bottom: 20px;">
+      <div class="panel-head">Registered tools</div>
+      <ul id="tools"><li class="muted">None yet.</li></ul>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Tool calls</div>
+      <ol id="log"><li class="muted">Waiting for an agent&hellip;</li></ol>
+    </div>
+  </section>
+
+  <section>
+    <h2>No agent handy?</h2>
+    <p class="muted" style="margin-top: 0; font-size: 14px;">
+      These call the same functions the agent's tools call.
+    </p>
+    <div class="panel" style="padding: 20px;">
+      <button type="button" class="primary" id="check">Check availability</button>
+      <div class="fields">
+        <input id="name" type="text" placeholder="Your name" autocomplete="name" />
+        <input id="phone" type="tel" placeholder="+1 415 555 0134" autocomplete="tel" />
+        <button type="button" class="secondary" id="call">Request a call</button>
+      </div>
+      <p class="muted" style="font-size: 12px; margin-bottom: 0;" id="target-note"></p>
+    </div>
+  </section>
+
+  <section style="margin-bottom: 0;">
+    <h2>The whole integration</h2>
+    <p>One script tag on any page:</p>
+    <pre class="snippet">&lt;script src="https://callingly.com/js/webmcp.js"
+        data-callingly-key="YOUR_WEBHOOK_KEY" async&gt;&lt;/script&gt;</pre>
+  </section>
+</main>
+
+<script>
+// Point the snippet at the mock server by default, or at a real Callingly
+// account with ?api=https://callingly.com&key=YOUR_WEBHOOK_KEY
+(function () {
+    var params = new URLSearchParams(location.search);
+    var api = params.get('api') || location.origin;
+    var key = params.get('key') || 'demo';
+
+    window.callinglySettings = { key: key, api: api, team: params.get('team') || 'Sales' };
+
+    document.getElementById('target-note').textContent = api === location.origin
+        ? 'Pointed at the local mock server — no real call is placed.'
+        : 'Pointed at ' + api + ' — this places a real call.';
+})();
+
+// Demo instrumentation: wrap registerTool so tool registrations and calls are
+// visible. Production embeds need none of this.
+(function () {
+    var toolsEl = document.getElementById('tools');
+    var logEl = document.getElementById('log');
+    var statusEl = document.getElementById('status');
+    var registered = [];
+    var logStarted = false;
+
+    function renderTools() {
+        if (!registered.length) { return; }
+
+        toolsEl.innerHTML = '';
+        registered.forEach(function (tool) {
+            var li = document.createElement('li');
+            var name = document.createElement('code');
+            var desc = document.createElement('p');
+
+            name.textContent = tool.name;
+            desc.className = 'muted';
+            desc.style.margin = '4px 0 0';
+            desc.textContent = tool.description || '';
+            li.appendChild(name);
+            li.appendChild(desc);
+            toolsEl.appendChild(li);
+        });
+
+        statusEl.textContent = registered.length + ' tools live';
+        statusEl.className = 'pill live';
+    }
+
+    function brief(value) {
+        try {
+            var json = JSON.stringify(value, null, 2);
+
+            return json && json.length > 600 ? json.slice(0, 600) + '\n…' : json;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function log(name, label, detail) {
+        if (!logStarted) {
+            logEl.innerHTML = '';
+            logStarted = true;
+        }
+
+        var li = document.createElement('li');
+        var row = document.createElement('div');
+        var code = document.createElement('code');
+        var stamp = document.createElement('span');
+
+        row.className = 'row';
+        code.textContent = name;
+        stamp.className = 'stamp';
+        stamp.textContent = new Date().toLocaleTimeString() + ' · ' + label;
+        row.appendChild(code);
+        row.appendChild(stamp);
+        li.appendChild(row);
+
+        if (detail) {
+            var pre = document.createElement('pre');
+
+            pre.textContent = detail;
+            li.appendChild(pre);
+        }
+
+        logEl.appendChild(li);
+    }
+
+    function instrument(context) {
+        if (!context || typeof context.registerTool !== 'function' || context.__demoPatched) { return; }
+
+        var original = context.registerTool.bind(context);
+
+        context.__demoPatched = true;
+        context.registerTool = function (tool, options) {
+            var execute = tool.execute;
+
+            registered.push(tool);
+            renderTools();
+
+            tool.execute = function () {
+                var args = arguments;
+
+                log(tool.name, 'called', brief(args[0]));
+
+                return Promise.resolve()
+                    .then(function () { return execute.apply(null, args); })
+                    .then(function (result) {
+                        log(tool.name, 'returned', brief(result));
+
+                        return result;
+                    }, function (error) {
+                        log(tool.name, 'refused', error && error.message);
+
+                        throw error;
+                    });
+            };
+
+            return original(tool, options);
+        };
+    }
+
+    instrument(document.modelContext);
+    instrument(navigator.modelContext);
+
+    document.getElementById('check').addEventListener('click', function () {
+        log('check-sales-availability', 'called (button)', null);
+        window.callingly.checkAvailability().then(function (data) {
+            log('check-sales-availability', 'returned', brief(data));
+        }, function (error) {
+            log('check-sales-availability', 'failed', error && error.message);
+        });
+    });
+
+    document.getElementById('call').addEventListener('click', function () {
+        var phone = document.getElementById('phone').value;
+
+        if (!phone) {
+            log('request-sales-call', 'refused', 'Enter a phone number first.');
+
+            return;
+        }
+
+        log('request-sales-call', 'called (button)', brief({ phone: phone }));
+        window.callingly.requestCall({
+            fname: document.getElementById('name').value || null,
+            phone: phone,
+            comments: 'Requested from the WebMCP demo page.',
+            consent: true
+        }).then(function (data) {
+            log('request-sales-call', 'returned', brief(data));
+        }, function (error) {
+            log('request-sales-call', error && error.declined ? 'declined' : 'failed', error && error.message);
+        });
+    });
+
+    setTimeout(function () {
+        if (!registered.length) {
+            statusEl.textContent = 'no WebMCP here';
+            statusEl.className = 'pill warn';
+            toolsEl.innerHTML = '<li class="muted">This browser has no <code>document.modelContext</code>, so nothing registered. Use the buttons below, or switch to a WebMCP-capable browser.</li>';
+        }
+    }, 3000);
+})();
+</script>
+<script src="../webmcp.js" async></script>
+
+</body>
+</html>
