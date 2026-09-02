@@ -17,18 +17,9 @@ live availability and a real phone call.
 
 ## Deploying
 
-The live site is a Cloudflare **Pages** project, created by direct upload, at
-<https://joesplumbing.callingly.com/>. Direct-upload projects do not watch Git,
-so a push to `main` does **not** redeploy — publish it yourself:
-
-```sh
-npm run build:site           # regenerates site/index.html
-npx wrangler pages deploy site --project-name=<project>
-```
-
-Cloudflare cannot add Git integration to an existing Pages project. Making
-pushes deploy on their own means creating a second, Git-connected project and
-moving the custom domain to it:
+The live site is a Cloudflare **Pages** project connected to this repo, serving
+`site/` at <https://joesplumbing.callingly.com/>. A push to `main` redeploys it,
+about a minute end to end:
 
 | Setting | Value |
 | --- | --- |
@@ -37,14 +28,27 @@ moving the custom domain to it:
 | Build command | *(leave empty)* |
 | Build output directory | `site` |
 
+So the whole flow after editing the page is:
+
+```sh
+npm run build:site   # regenerates site/index.html from demo/joes-plumbing/after/
+git add site demo && git commit && git push
+```
+
+To publish without a push — or if the Git integration is ever disconnected:
+
+```sh
+npx wrangler pages deploy site --project-name=<project>
+```
+
 Deliberately no `wrangler.toml` here: Pages reads one from the repo root if it
 finds it, and a config written for a Worker (`[assets]`) makes the build fail.
 
 `build:site` fails loudly if `demo/joes-plumbing/after/index.html` no longer
 carries the expected snippet tag, so the two cannot drift apart silently.
 
-Unknown paths 404, which is what we want: no `/before/` or `/after/` survives
-on the deployed origin even though earlier deploys served them.
+Unknown paths 404, so no `/before/` or `/after/` survives on the deployed
+origin even though earlier deploys served them.
 
 ## Locking the key to these origins (optional)
 
