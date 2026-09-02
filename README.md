@@ -144,6 +144,8 @@ reasoning behind the key model, the rate limits and the field-mapping guard.
 webmcp.js              The snippet, exactly as production serves it
 demo/index.html        Agent console — tools and live tool calls
 demo/joes-plumbing/    A fictional customer site, before and after the one line
+site/                  The same pair built for hosting — see DEPLOY.md
+build-site.mjs         Generates site/ from demo/joes-plumbing/
 demo/server.js         Dependency-free mock API + static server
 server/                The real Laravel implementation, for reading
 test/                  Browser checks for both demo pages
