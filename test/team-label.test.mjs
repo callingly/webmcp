@@ -42,5 +42,38 @@ const unlabelled = await read('http://localhost:8787/');
 check('with no data-team the server name is used', unlabelled.text.startsWith('The Sales team'), unlabelled.text.split('\n')[0]);
 check('the generic fallback is not used when the server named the team', !unlabelled.text.includes('The sales team'), unlabelled.text.split('\n')[0]);
 
+// A successful call request answers with the server's own sentence, which
+// names the team by its internal name. Availability using the page label while
+// this one did not made the agent call the same team two unrelated things in
+// consecutive turns.
+const page = await browser.newPage();
+
+await page.addInitScript(() => {
+    window.__tools = {};
+    document.modelContext = { registerTool(tool) { window.__tools[tool.name] = tool; return Promise.resolve(); } };
+});
+
+await page.goto('http://localhost:8787/demo/joes-plumbing/after/', { waitUntil: 'domcontentloaded' });
+await page.waitForFunction(() => Object.keys(window.__tools).length === 2, null, { timeout: 15000 });
+
+const placed = await page.evaluate(async () => {
+    const pending = window.__tools['callingly-request-sales-call']
+        .execute({ phone: '+14155550134', name: 'Dana Reyes', reason: 'burst pipe', consent: true }, {});
+
+    for (let i = 0; i < 80 && !document.querySelector('[data-callingly-confirm]'); i++) {
+        await new Promise((f) => setTimeout(f, 50));
+    }
+
+    document.querySelector('[data-callingly-confirm]').shadowRoot.querySelector('.yes').click();
+
+    const result = await pending;
+
+    return { text: result.content[0].text, isError: !!result.isError };
+});
+
+check('the call request was accepted', !placed.isError, placed.text);
+check('the accepted call names the page label', placed.text.includes("Joe's Plumbing"), placed.text);
+check('the server name does not leak into the confirmation', !placed.text.includes('Sales team'), placed.text);
+
 await browser.close();
 process.exit(failures ? 1 : 0);

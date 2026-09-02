@@ -336,6 +336,20 @@
         return teamFromPage ? config.team : ((data && data.team) || config.team);
     }
 
+    /**
+     * The server composes its own sentences — "We're ringing the X team now" —
+     * and names the team by its internal Callingly name. Swap in the page's
+     * label so the two tools cannot call the same team two unrelated things in
+     * consecutive turns.
+     */
+    function relabelTeam(message, data) {
+        if (!teamFromPage || !message || !data || !data.team || data.team === config.team) {
+            return message;
+        }
+
+        return message.split(data.team).join(config.team);
+    }
+
     function describeAvailability(data) {
         var lines = [];
         var team = teamName(data);
@@ -461,7 +475,7 @@
                     comments: input.reason || null,
                     consent: true
                 }, { signal: signal }).then(function (data) {
-                    return text(data.message + ' (Callingly is calling ' + formatPhone(data.phone_number) + '.)');
+                    return text(relabelTeam(data.message, data) + ' (Callingly is calling ' + formatPhone(data.phone_number) + '.)');
                 }).catch(function (error) {
                     if (error.declined) {
                         return failure(
