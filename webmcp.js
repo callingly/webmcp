@@ -19,7 +19,8 @@
  *
  * Optional attributes:
  *   data-api="https://callingly.com"  API origin (defaults to this script's)
- *   data-team="Sales"                 label used in tool descriptions
+ *   data-team="Sales"                 what the tools call the team, in their
+ *                                     descriptions and in what they answer
  *   data-prefix="callingly"           tool-name prefix ("" for none)
  *   data-confirm="false"              skip the in-page confirmation card
  *
@@ -51,6 +52,10 @@
         prefix: overrides.prefix != null ? overrides.prefix : (attr('data-prefix') != null ? attr('data-prefix') : 'callingly'),
         confirm: overrides.confirm != null ? !!overrides.confirm : attr('data-confirm') !== 'false'
     };
+
+    // Whether the page named the team itself, as opposed to falling back to
+    // the generic label. See teamName().
+    var teamFromPage = !!(overrides.team || attr('data-team'));
 
     if (!config.key) {
         console.warn('[callingly] No Callingly key. Add data-callingly-key="..." to the script tag.');
@@ -320,12 +325,24 @@
         return { content: [{ type: 'text', text: value }], isError: true };
     }
 
+    /**
+     * What to call the team in a sentence. The page's own label wins when the
+     * operator set one: the server knows the team by its internal Callingly
+     * name, which can be nothing like what the site calls it, and the tool
+     * descriptions and the confirmation card already use the page's label. A
+     * page that named no team gets the server's name, which beats "sales".
+     */
+    function teamName(data) {
+        return teamFromPage ? config.team : ((data && data.team) || config.team);
+    }
+
     function describeAvailability(data) {
         var lines = [];
+        var team = teamName(data);
 
         lines.push(data.available_now
-            ? 'The ' + data.team + ' team can take a call right now.'
-            : 'The ' + data.team + ' team cannot take a call right now.');
+            ? 'The ' + team + ' team can take a call right now.'
+            : 'The ' + team + ' team cannot take a call right now.');
 
         if (!data.available_now) {
             lines.push(data.within_business_hours
