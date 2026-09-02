@@ -75,5 +75,47 @@ check('the call request was accepted', !placed.isError, placed.text);
 check('the accepted call names the page label', placed.text.includes("Joe's Plumbing"), placed.text);
 check('the server name does not leak into the confirmation', !placed.text.includes('Sales team'), placed.text);
 
+// Nothing stops an account calling its team after a common word. Relabelling
+// every occurrence of the internal name would then rewrite the rest of the
+// server's sentence: a team named "call" turned "expect a call within a minute"
+// into "expect a Joe's Plumbing within a minute".
+const collide = await browser.newPage();
+
+await collide.addInitScript(() => {
+    window.__tools = {};
+    document.modelContext = { registerTool(tool) { window.__tools[tool.name] = tool; return Promise.resolve(); } };
+});
+
+await collide.route('**/embed/v1/**/calls', (route) => route.fulfill({
+    status: 202,
+    contentType: 'application/json',
+    body: JSON.stringify({
+        accepted: true,
+        team: 'call',
+        phone_number: '+14155550134',
+        dialing_now: true,
+        message: "We're ringing the call team now — expect a call within a minute or two.",
+    }),
+}));
+
+await collide.goto('http://localhost:8787/demo/joes-plumbing/after/', { waitUntil: 'domcontentloaded' });
+await collide.waitForFunction(() => Object.keys(window.__tools).length === 2, null, { timeout: 15000 });
+
+const collided = await collide.evaluate(async () => {
+    const pending = window.__tools['callingly-request-sales-call']
+        .execute({ phone: '+14155550134', consent: true }, {});
+
+    for (let i = 0; i < 80 && !document.querySelector('[data-callingly-confirm]'); i++) {
+        await new Promise((f) => setTimeout(f, 50));
+    }
+
+    document.querySelector('[data-callingly-confirm]').shadowRoot.querySelector('.yes').click();
+
+    return (await pending).content[0].text;
+});
+
+check('the team name slot is relabelled', collided.includes("the Joe's Plumbing team now"), collided);
+check('the rest of the sentence is left alone', collided.includes('expect a call within a minute'), collided);
+
 await browser.close();
 process.exit(failures ? 1 : 0);

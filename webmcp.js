@@ -341,13 +341,18 @@
      * and names the team by its internal Callingly name. Swap in the page's
      * label so the two tools cannot call the same team two unrelated things in
      * consecutive turns.
+     *
+     * Only the name in front of the word "team" is replaced. Replacing every
+     * occurrence would garble the rest of the sentence for an account whose
+     * team is named after a common word: a team called "call" would turn
+     * "expect a call within a minute" into "expect a Plumbers within a minute".
      */
     function relabelTeam(message, data) {
         if (!teamFromPage || !message || !data || !data.team || data.team === config.team) {
             return message;
         }
 
-        return message.split(data.team).join(config.team);
+        return message.split(data.team + ' team').join(config.team + ' team');
     }
 
     function describeAvailability(data) {
