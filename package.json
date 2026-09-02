@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "start": "node demo/server.js",
-    "test": "node test/console-page.test.mjs && node test/customer-page.test.mjs && node test/context-swap.test.mjs && node test/context-replaced-late.test.mjs && node test/late-success-then-swap.test.mjs && node test/context-arrives-late.test.mjs && node test/confirmation-card.test.mjs",
+    "test": "node test/console-page.test.mjs && node test/console-cannot-wrap.test.mjs && node test/customer-page.test.mjs && node test/context-swap.test.mjs && node test/context-replaced-late.test.mjs && node test/late-success-then-swap.test.mjs && node test/context-arrives-late.test.mjs && node test/confirmation-card.test.mjs",
     "build:site": "node build-site.mjs"
   },
   "devDependencies": {

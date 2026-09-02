@@ -141,15 +141,39 @@
 // Demo instrumentation: wrap registerTool so tool registrations and calls are
 // visible. Production embeds need none of this.
 (function () {
+    var warnings = [];
+    var nativeWarn = console.warn;
+
+    // The snippet says why a registration failed on console.warn; keep those
+    // so the report below can quote the actual reason.
+    console.warn = function () {
+        var first = arguments.length ? String(arguments[0]) : '';
+
+        if (first.indexOf('[callingly]') === 0) {
+            warnings.push(Array.prototype.slice.call(arguments).map(function (a) {
+                return a && a.message ? a.message : String(a);
+            }).join(' '));
+        }
+
+        return nativeWarn.apply(console, arguments);
+    };
+
     var toolsEl = document.getElementById('tools');
     var logEl = document.getElementById('log');
     var statusEl = document.getElementById('status');
     var registered = [];
     var logStarted = false;
+    var calls = 0;
+    var patched = false;
+    var seen = [];
+    var rendered = 0;
 
     function renderTools() {
-        if (!registered.length) { return; }
+        // adopt() re-offers the same tools on every poll; only redraw when the
+        // list actually grew.
+        if (!registered.length || registered.length === rendered) { return; }
 
+        rendered = registered.length;
         toolsEl.innerHTML = '';
         registered.forEach(function (tool) {
             var li = document.createElement('li');
@@ -208,42 +232,109 @@
         logEl.appendChild(li);
     }
 
-    function instrument(context) {
-        if (!context || typeof context.registerTool !== 'function' || context.__demoPatched) { return; }
+    function logCalls(tool) {
+        if (!tool || typeof tool.execute !== 'function' || tool.__demoLogged) { return; }
 
-        var original = context.registerTool.bind(context);
+        var execute = tool.execute;
 
-        context.__demoPatched = true;
-        context.registerTool = function (tool, options) {
-            var execute = tool.execute;
+        tool.__demoLogged = true;
+        tool.execute = function () {
+            // Hold on to the caller's arguments and receiver: inside the
+            // then() callback below, `arguments` and `this` are the callback's
+            // own, so applying them would call the tool with no input at all.
+            var self = this;
+            var args = arguments;
 
-            registered.push(tool);
-            renderTools();
+            log(tool.name, 'called', brief(args[0]));
 
-            tool.execute = function () {
-                var args = arguments;
+            return Promise.resolve()
+                .then(function () { return execute.apply(self, args); })
+                .then(function (result) {
+                    log(tool.name, 'returned', brief(result));
 
-                log(tool.name, 'called', brief(args[0]));
+                    return result;
+                }, function (error) {
+                    log(tool.name, 'refused', error && error.message);
 
-                return Promise.resolve()
-                    .then(function () { return execute.apply(null, args); })
-                    .then(function (result) {
-                        log(tool.name, 'returned', brief(result));
-
-                        return result;
-                    }, function (error) {
-                        log(tool.name, 'refused', error && error.message);
-
-                        throw error;
-                    });
-            };
-
-            return original(tool, options);
+                    throw error;
+                });
         };
     }
 
-    instrument(document.modelContext);
-    instrument(navigator.modelContext);
+    function remember(tool) {
+        logCalls(tool);
+
+        if (!registered.some(function (t) { return t.name === tool.name; })) {
+            registered.push(tool);
+        }
+
+        renderTools();
+    }
+
+    function instrument(context) {
+        if (!context || typeof context.registerTool !== 'function' || seen.indexOf(context) !== -1) { return; }
+
+        var original = context.registerTool.bind(context);
+
+        seen.push(context);
+
+        var wrapper = function (tool, options) {
+            logCalls(tool);
+            calls++;
+
+            // Count the tool only once the browser has accepted it. Listing it
+            // when it was merely offered made the console claim tools were live
+            // on an implementation that rejected every one of them.
+            try {
+                return Promise.resolve(original(tool, options)).then(function (result) {
+                    remember(tool);
+
+                    return result;
+                }, function (error) {
+                    log(tool.name, 'registration refused', error && error.message);
+
+                    throw error;
+                });
+            } catch (error) {
+                log(tool.name, 'registration refused', error && error.message);
+
+                throw error;
+            }
+        };
+
+        context.registerTool = wrapper;
+
+        // A platform object can refuse the assignment without throwing, and
+        // then nothing the snippet registers ever reaches the console. Find
+        // that out here rather than reporting it as a registration failure.
+        patched = patched || context.registerTool === wrapper;
+    }
+
+    // The console must not depend on its own wrapper to know what is live. A
+    // browser may hand out a model context whose registerTool cannot be
+    // replaced - a frozen platform object takes the assignment and quietly
+    // keeps its own method - and then the snippet registers both tools
+    // perfectly while the console, seeing nothing come through its wrapper,
+    // calls it a failure. So ask the snippet what it managed to register.
+    function adopt() {
+        if (!window.callingly || !window.callingly.isRegistered()) { return; }
+
+        window.callingly.tools.forEach(remember);
+    }
+
+    function instrumentAll() {
+        instrument(document.modelContext);
+        instrument(navigator.modelContext);
+        adopt();
+    }
+
+    instrumentAll();
+
+    // An agent can install its model context at any point after load - that is
+    // why the snippet polls for one - and a context that arrives late would
+    // otherwise never be wrapped, leaving the console empty while the tools
+    // registered fine. instrument() no-ops on a context it has already seen.
+    setInterval(instrumentAll, 500);
 
     document.getElementById('check').addEventListener('click', function () {
         log('check-sales-availability', 'called (button)', null);
@@ -276,12 +367,67 @@
         });
     });
 
-    setTimeout(function () {
-        if (!registered.length) {
-            statusEl.textContent = 'no WebMCP here';
-            statusEl.className = 'pill warn';
-            toolsEl.innerHTML = '<li class="muted">This browser has no <code>document.modelContext</code>, so nothing registered. Use the buttons below, or switch to a WebMCP-capable browser.</li>';
+    // Nothing registered after a few seconds has several causes that need
+    // different fixes, and the old message asserted the one it had not checked
+    // ("this browser has no document.modelContext"). Report what is actually
+    // on the page instead.
+    function diagnose() {
+        var context = document.modelContext || navigator.modelContext || null;
+        var where = document.modelContext ? 'document.modelContext'
+            : (navigator.modelContext ? 'navigator.modelContext' : null);
+
+        if (!window.callingly) {
+            return {
+                status: 'snippet did not load',
+                detail: 'The page never got <code>window.callingly</code>, so <code>webmcp.js</code> did not run - '
+                    + 'blocked by an extension, a content policy, or the network. Nothing to do with WebMCP.'
+            };
         }
+
+        if (!context) {
+            return {
+                status: 'no WebMCP here',
+                detail: 'Neither <code>document.modelContext</code> nor <code>navigator.modelContext</code> exists, so '
+                    + 'this browser is not offering the API. In the ChatGPT desktop app check <em>Settings &rarr; '
+                    + 'Browser &rarr; Permissions &rarr; Enable site tools</em>; in Chrome 149+ enable '
+                    + '<code>chrome://flags/#enable-webmcp-testing</code>. The buttons below work either way.'
+            };
+        }
+
+        if (typeof context.registerTool !== 'function') {
+            return {
+                status: 'unfamiliar WebMCP',
+                detail: '<code>' + where + '</code> exists but has no <code>registerTool()</code>. This build speaks a '
+                    + 'different draft of the API than the snippet does.'
+            };
+        }
+
+        if (!calls && !patched) {
+            return {
+                status: 'console blindfolded',
+                detail: '<code>' + where + '</code> would not let this page wrap <code>registerTool()</code>, so the '
+                    + 'console cannot see registrations or calls. The snippet reports '
+                    + (window.callingly.isRegistered() ? 'both tools registered' : 'no tools registered') + '.'
+                    + (warnings.length ? ' <em>' + warnings.join(' / ') + '</em>' : '')
+            };
+        }
+
+        return {
+            status: 'registration failed',
+            detail: '<code>' + where + '</code>.<code>registerTool()</code> is available and was called ' + calls
+                + ' time' + (calls === 1 ? '' : 's') + ', but no tool came back registered'
+                + (warnings.length ? ': <em>' + warnings.join(' / ') + '</em>' : '.')
+        };
+    }
+
+    setTimeout(function () {
+        if (registered.length) { return; }
+
+        var report = diagnose();
+
+        statusEl.textContent = report.status;
+        statusEl.className = 'pill warn';
+        toolsEl.innerHTML = '<li class="muted">' + report.detail + '</li>';
     }, 3000);
 })();
 </script>

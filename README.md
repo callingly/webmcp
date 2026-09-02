@@ -16,6 +16,18 @@ That is the whole integration. The snippet registers two
 | `callingly-check-sales-availability` | Read-only. Is the team inside its hours, is a rep actually free right now, when is the next opening, and are call requests being accepted at all. |
 | `callingly-request-sales-call` | Asks Callingly to ring the sales team and bridge the visitor. Requires the visitor's consent, and confirms in-page before anything is sent. |
 
+## See it live
+
+| URL | What it is |
+| --- | --- |
+| <https://joesplumbing.callingly.com/> | The **fictional plumber's site**, with the snippet on it and nothing else to give it away. Ask your agent whether anyone is free, or to have someone call you. |
+| <https://callingly.com/webmcp> | The **agent console** — the same snippet, plus a live view of which tools registered and every call an agent makes against them, with arguments and return values. Start here if you want to watch the tool calls. |
+
+Both need a WebMCP-capable browser: ChatGPT's in-app browser with **Settings →
+Browser → Permissions → "Enable site tools"** on, or Chrome 149+ with
+`chrome://flags/#enable-webmcp-testing` enabled. The console says which of
+those is missing if the tools do not appear.
+
 ## The problem this solves
 
 Every B2B site has the same dead end: a visitor with a real question, and a
@@ -144,8 +156,8 @@ reasoning behind the key model, the rate limits and the field-mapping guard.
 webmcp.js              The snippet, exactly as production serves it
 demo/index.html        Agent console — tools and live tool calls
 demo/joes-plumbing/    A fictional customer site, before and after the one line
-site/                  The same pair built for hosting — see DEPLOY.md
-build-site.mjs         Generates site/ from demo/joes-plumbing/
+site/                  Just the "after" page, built for hosting — see DEPLOY.md
+build-site.mjs         Generates site/ from demo/joes-plumbing/after/
 demo/server.js         Dependency-free mock API + static server
 server/                The real Laravel implementation, for reading
 test/                  Browser checks for both demo pages

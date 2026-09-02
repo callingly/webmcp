@@ -1,12 +1,19 @@
 # Deploying the demo site
 
-`site/` is what gets served. It is generated from `demo/joes-plumbing/` by
-`npm run build:site` and committed, so a host needs no build step at all.
+`site/` is what gets served, and it holds exactly one file: `index.html`, the
+plumber page with the snippet on it, at the root. It is generated from
+`demo/joes-plumbing/after/index.html` by `npm run build:site` and committed, so
+a host needs no build step at all.
 
-The two differ in one way: the local demo (`npm start`) loads the snippet from
-its own mock server so it works with no backend, while `site/` loads it from
-`callingly.com` with the demo account's key, so a visitor gets live availability
-and a real phone call.
+There is deliberately no landing page and no `/before/` path on the deployed
+site. The domain has to read as an ordinary plumber's website — a page
+explaining the demo would give the game away before an agent ever looked at it.
+The before/after pair still lives in `demo/` for the `diff` and for the tests.
+
+The hosted page differs from the local one in one line: `npm start` loads the
+snippet from its own mock server so it works with no backend, while `site/`
+loads it from `callingly.com` with the demo account's key, so a visitor gets
+live availability and a real phone call.
 
 ## Cloudflare Pages, connected to this repo
 
@@ -19,13 +26,16 @@ Dashboard → Workers & Pages → Create → Pages → Connect to Git → `calli
 | Build command | *(leave empty)* |
 | Build output directory | `site` |
 
-Every push to `main` then redeploys. Nothing else to configure — the pages are
-static and the API they call is CORS-open by design.
+Every push to `main` then redeploys. Nothing else to configure — the page is
+static and the API it calls is CORS-open by design.
+
+The deployment is served at <https://joesplumbing.callingly.com/> via a custom
+domain on the Pages project.
 
 ## After editing the site
 
 ```sh
-npm run build:site   # regenerates site/ from demo/joes-plumbing/
+npm run build:site   # regenerates site/index.html from demo/joes-plumbing/after/
 git add site demo && git commit && git push
 ```
 
