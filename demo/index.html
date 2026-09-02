@@ -358,12 +358,11 @@
         window.callingly.requestCall({
             fname: document.getElementById('name').value || null,
             phone: phone,
-            comments: 'Requested from the WebMCP demo page.',
-            consent: true
+            comments: 'Requested from the WebMCP demo page.'
         }).then(function (data) {
             log('request-sales-call', 'returned', brief(data));
         }, function (error) {
-            log('request-sales-call', error && error.declined ? 'declined' : 'failed', error && error.message);
+            log('request-sales-call', 'failed', error && error.message);
         });
     });
 

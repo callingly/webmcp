@@ -49,7 +49,6 @@ function embedCall(array $payload = [], array $headers = [])
         'lname' => 'Reyes',
         'phone' => '(415) 555-0134',
         'email' => 'dana@example.com',
-        'consent' => true,
     ], $payload), $headers);
 }
 
@@ -119,19 +118,35 @@ test('a call request queues the webhook pipeline with a normalized number', func
             && $input['phone'] === '+14155550134'
             && $input['fname'] === 'Dana'
             && $input['lname'] === 'Reyes'
-            && $input['consent'] === true
             && $input['requested_via'] === 'webmcp';
     });
 });
 
-test('a call request without consent is rejected', function () {
+test('the accepted-call message names the team in front of the word team', function () {
     Queue::fake();
 
-    createEmbedTestData();
+    $data = createEmbedTestData();
 
-    embedCall(['consent' => false])->assertStatus(422)->assertJsonValidationErrors('consent');
+    // The snippet relabels the team in this sentence with the page's own
+    // data-team, and it does that by matching the name in front of "team".
+    // Changing the wording so the name no longer sits there would silently stop
+    // the relabelling — see tests/Browser/WebMcpSnippetTest.php.
+    embedCall()->assertStatus(202)->assertJson([
+        'team' => 'Sales',
+        'message' => "We're ringing the Sales team now — expect a call within a minute or two.",
+    ]);
 
-    Queue::assertNotPushed(Webhook::class);
+    VoicemailSchedule::where('profile_id', $data['team']->id)->update([
+        'start' => 'notavailable',
+        'end' => 'notavailable',
+    ]);
+
+    embedCall()->assertStatus(202)
+        ->assertJsonPath('dialing_now', false)
+        ->assertJsonPath(
+            'message',
+            "The Sales team is outside its calling hours, so the request is queued and will be called when they're next available."
+        );
 });
 
 test('a call request with an undialable number is rejected', function () {

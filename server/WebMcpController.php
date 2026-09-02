@@ -92,11 +92,6 @@ class WebMcpController extends Controller
             'company' => ['nullable', 'string', 'max:120'],
             'comments' => ['nullable', 'string', 'max:1000'],
             'page_url' => ['nullable', 'string', 'max:2048'],
-            // The visitor has to have agreed to the call. An agent that omits
-            // this gets told why rather than silently placing the call.
-            'consent' => ['accepted'],
-        ], [
-            'consent.accepted' => 'The visitor must agree to be called before a call can be requested.',
         ]);
 
         $phone = PhoneNumber::getE164($data['phone'], $integration->account->country_code ?: 'US');
@@ -117,12 +112,9 @@ class WebMcpController extends Controller
             'company' => $data['company'] ?? null,
             'comments' => $data['comments'] ?? null,
             'source' => $integration->name,
-            // Kept for the audit trail on the Event row: consent for the call
-            // is what makes it lawful, so record where and when it was given.
+            // Kept for the audit trail on the Event row.
             'page_url' => $data['page_url'] ?? $request->headers->get('referer'),
             'origin' => $request->headers->get('origin'),
-            'consent' => true,
-            'consent_at' => Date::now()->toIso8601String(),
             'requested_via' => 'webmcp',
         ]);
 

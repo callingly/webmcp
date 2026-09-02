@@ -14,7 +14,7 @@ That is the whole integration. The snippet registers two
 | Tool | What it does |
 | --- | --- |
 | `callingly-check-sales-availability` | Read-only. Is the team inside its hours, is a rep actually free right now, when is the next opening, and are call requests being accepted at all. |
-| `callingly-request-sales-call` | Asks Callingly to ring the sales team and bridge the visitor. Requires the visitor's consent, and confirms in-page before anything is sent. |
+| `callingly-request-sales-call` | Asks Callingly to ring the sales team and bridge the visitor on the number the agent passes. |
 
 ## See it live
 
@@ -98,32 +98,12 @@ DEMO_TEAM="Copperleaf Solar" npm start     # the name the agent says back
 DEMO_CLOSED=1 npm start                    # exercise the after-hours path
 ```
 
-## How consent works
-
-Getting a stranger's phone to ring is not something an agent should be able to
-do on a hunch, so consent is enforced in three places and the tool descriptions
-say so plainly:
-
-1. **`consent` is a required boolean in the tool's input schema**, described as
-   *"True only if the visitor asked to be called on this number. Never assume
-   it."* An agent that omits it gets an `isError` result telling it to go and
-   ask, not a call.
-2. **The page confirms.** Before anything is sent, the snippet shows a card in
-   a shadow root — immune to the host page's CSS — naming the number and asking
-   the visitor to approve. Escape, an abort signal or 120 seconds of silence
-   all count as "no".
-3. **The server records it.** Consent, the page URL, the origin and a timestamp
-   land on the audit row alongside the lead.
-
-The direct JS API (`window.callingly.requestCall`) applies the same rules, so
-non-WebMCP callers cannot route around them.
-
 ## How it is implemented
 
 The snippet is dependency-free ES5 in a single IIFE, ~500 lines. It:
 
 - reads its config from the script tag (`data-callingly-key`, `data-api`,
-  `data-team`, `data-prefix`, `data-confirm`) or `window.callinglySettings`;
+  `data-team`, `data-prefix`) or `window.callinglySettings`;
 - registers both tools via `document.modelContext.registerTool(tool, { signal })`,
   falling back to `navigator.modelContext` for older origin-trial builds;
 - retries registration when `document.modelContext` is not there yet — agent
@@ -167,8 +147,8 @@ test/                  Browser checks for both demo pages
 
 The server side has a Pest feature suite (`server/EmbedWebMcpTest.php`):
 availability open and closed, unknown keys, the exact payload handed to the
-queue, consent refusal, undialable numbers, the origin allow-list, the
-field-mapping guard and CORS preflight.
+queue, undialable numbers, the origin allow-list, the field-mapping guard and
+CORS preflight.
 
 The client side has browser checks that drive a stubbed `document.modelContext`
 the way an agent browser would:
@@ -180,9 +160,9 @@ npm test
 ```
 
 They assert that both tools register, that availability is marked
-`readOnlyHint`, that a call with no consent is refused with an actionable
-message and creates no card, that the confirmation card appears and that
-declining it sends nothing.
+`readOnlyHint`, that a call reaches the endpoint with the arguments the agent
+passed, that a call with no number is refused with an actionable message, and
+that the tools recover when the model context arrives late or is replaced.
 
 ## License
 

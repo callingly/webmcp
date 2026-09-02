@@ -1,7 +1,7 @@
 // The page's own data-team label has to be what the tools say back. The
 // availability sentence used the server's internal team name instead, so the
 // plumber demo answered "The Sales team can take a call right now" while the
-// confirmation card on the same page said "our Joe's Plumbing team".
+// same page's tool description called it "Joe's Plumbing".
 import { chromium } from 'playwright';
 
 let failures = 0;
@@ -58,13 +58,7 @@ await page.waitForFunction(() => Object.keys(window.__tools).length === 2, null,
 
 const placed = await page.evaluate(async () => {
     const pending = window.__tools['callingly-request-sales-call']
-        .execute({ phone: '+14155550134', name: 'Dana Reyes', reason: 'burst pipe', consent: true }, {});
-
-    for (let i = 0; i < 80 && !document.querySelector('[data-callingly-confirm]'); i++) {
-        await new Promise((f) => setTimeout(f, 50));
-    }
-
-    document.querySelector('[data-callingly-confirm]').shadowRoot.querySelector('.yes').click();
+        .execute({ phone: '+14155550134', name: 'Dana Reyes', reason: 'burst pipe' }, {});
 
     const result = await pending;
 
@@ -73,7 +67,7 @@ const placed = await page.evaluate(async () => {
 
 check('the call request was accepted', !placed.isError, placed.text);
 check('the accepted call names the page label', placed.text.includes("Joe's Plumbing"), placed.text);
-check('the server name does not leak into the confirmation', !placed.text.includes('Sales team'), placed.text);
+check('the server name does not leak into the answer', !placed.text.includes('Sales team'), placed.text);
 
 // Nothing stops an account calling its team after a common word. Relabelling
 // every occurrence of the internal name would then rewrite the rest of the
@@ -103,13 +97,7 @@ await collide.waitForFunction(() => Object.keys(window.__tools).length === 2, nu
 
 const collided = await collide.evaluate(async () => {
     const pending = window.__tools['callingly-request-sales-call']
-        .execute({ phone: '+14155550134', consent: true }, {});
-
-    for (let i = 0; i < 80 && !document.querySelector('[data-callingly-confirm]'); i++) {
-        await new Promise((f) => setTimeout(f, 50));
-    }
-
-    document.querySelector('[data-callingly-confirm]').shadowRoot.querySelector('.yes').click();
+        .execute({ phone: '+14155550134' }, {});
 
     return (await pending).content[0].text;
 });

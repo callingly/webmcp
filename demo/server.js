@@ -107,10 +107,6 @@ function handleCall(req, res, body) {
         return invalid(res, 'phone', 'Could not parse that request body.');
     }
 
-    if (input.consent !== true) {
-        return invalid(res, 'consent', 'The visitor must agree to be called before a call can be requested.');
-    }
-
     const phone = String(input.phone || '').trim();
 
     if (!/^\+?[0-9][0-9\s\-().]{6,}$/.test(phone)) {

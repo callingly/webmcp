@@ -11,7 +11,7 @@ shapes, which is what `npm start` runs.
 | `routes-embed.php` | The two public routes, deliberately outside the session-authenticated `web` stack. Lives at `routes/embed.php`. |
 | `WebMcpController.php` | Resolves the integration from the embed key, answers availability, and hands accepted calls to the same queued webhook pipeline every other lead goes through. |
 | `EmbedCors.php` | Wildcard CORS for the embed routes. The app's normal CORS config sets `supports_credentials`, which forbids a wildcard origin, so these routes need their own middleware. |
-| `EmbedWebMcpTest.php` | The Pest feature suite: open and closed availability, unknown keys, the queued job payload, consent refusal, undialable numbers, the origin allow-list, the field-mapping guard, and CORS preflight. |
+| `EmbedWebMcpTest.php` | The Pest feature suite: open and closed availability, unknown keys, the queued job payload, undialable numbers, the origin allow-list, the field-mapping guard, and CORS preflight. |
 
 ## Notes on the design
 

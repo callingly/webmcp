@@ -22,7 +22,6 @@
  *   data-team="Sales"                 what the tools call the team, in their
  *                                     descriptions and in what they answer
  *   data-prefix="callingly"           tool-name prefix ("" for none)
- *   data-confirm="false"              skip the in-page confirmation card
  *
  * Anything registered here is also on window.callingly, so your own code (or
  * an extension that doesn't speak WebMCP yet) can call the same functions.
@@ -49,8 +48,7 @@
         key: overrides.key || attr('data-callingly-key') || attr('data-key'),
         api: (overrides.api || attr('data-api') || defaultApiOrigin()).replace(/\/+$/, ''),
         team: overrides.team || attr('data-team') || 'sales',
-        prefix: overrides.prefix != null ? overrides.prefix : (attr('data-prefix') != null ? attr('data-prefix') : 'callingly'),
-        confirm: overrides.confirm != null ? !!overrides.confirm : attr('data-confirm') !== 'false'
+        prefix: overrides.prefix != null ? overrides.prefix : (attr('data-prefix') != null ? attr('data-prefix') : 'callingly')
     };
 
     // Whether the page named the team itself, as opposed to falling back to
@@ -144,49 +142,22 @@
 
     /**
      * Ask Callingly to call this person.
-     *
-     * `lead.consent` is the caller's assertion that the visitor asked to be
-     * called on this number, and it is never assumed: the audit record kept
-     * against the call has to mean something, so a caller that can't say yes
-     * gets an error instead of a fabricated yes. On top of that the visitor
-     * confirms on the page, which a first-party caller that has already taken
-     * consent (its own form, say) can waive with `{ confirm: false }`.
      */
     function requestCall(lead, options) {
         options = options || {};
 
-        if (lead.consent !== true) {
-            return Promise.reject(new Error(
-                'requestCall needs consent: true — the visitor must have asked to be called on this number.'
-            ));
-        }
-
-        var confirmation = options.confirm === false
-            ? Promise.resolve(true)
-            : confirmCall(lead, options.signal);
-
-        return confirmation.then(function (confirmed) {
-            if (!confirmed) {
-                var declined = new Error('The visitor did not confirm the call on the page.');
-                declined.declined = true;
-
-                throw declined;
+        return request('/calls', {
+            method: 'POST',
+            signal: options.signal,
+            body: {
+                fname: lead.fname || null,
+                lname: lead.lname || null,
+                phone: lead.phone,
+                email: lead.email || null,
+                company: lead.company || null,
+                comments: lead.comments || null,
+                page_url: window.location.href
             }
-
-            return request('/calls', {
-                method: 'POST',
-                signal: options.signal,
-                body: {
-                    fname: lead.fname || null,
-                    lname: lead.lname || null,
-                    phone: lead.phone,
-                    email: lead.email || null,
-                    company: lead.company || null,
-                    comments: lead.comments || null,
-                    page_url: window.location.href,
-                    consent: true
-                }
-            });
         }).then(function (data) {
             // The team's state just changed (a rep is about to be on a call).
             availabilityCache = null;
@@ -195,100 +166,9 @@
         });
     }
 
-    /* ------------------------------------------------------------------
-     * Confirmation card
-     *
-     * WebMCP has no built-in consent prompt, and this tool makes a phone
-     * ring: someone's number gets dialed and a rep's time gets spent. So the
-     * page asks the human directly before the request goes out, in a shadow
-     * root so no host-page CSS can hide or restyle it.
-     * ---------------------------------------------------------------- */
-
-    function confirmCall(lead, signal) {
-        if (!config.confirm) {
-            return Promise.resolve(true);
-        }
-
-        return new Promise(function (resolve) {
-            var host = document.createElement('div');
-            host.setAttribute('data-callingly-confirm', '');
-            var root = host.attachShadow({ mode: 'open' });
-
-            root.innerHTML =
-                '<style>' +
-                ':host{all:initial}' +
-                '.card{position:fixed;right:16px;bottom:16px;z-index:2147483647;width:320px;max-width:calc(100vw - 32px);' +
-                'background:#fff;color:#0e2d3e;border-radius:12px;box-shadow:0 12px 32px rgba(7,59,76,.24);' +
-                'font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}' +
-                '.title{font-weight:600;margin:0 0 6px;font-size:15px}' +
-                '.body{margin:0 0 14px;color:#3d5866}' +
-                '.num{font-weight:600;color:#0e2d3e;white-space:nowrap}' +
-                '.row{display:flex;gap:8px;justify-content:flex-end}' +
-                'button{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid transparent}' +
-                '.no{background:#fff;border-color:#c9d6dd;color:#3d5866}' +
-                '.yes{background:#167296;color:#fff}' +
-                '.yes:hover{background:#0e2d3e}' +
-                'button:focus-visible{outline:2px solid #24a9df;outline-offset:2px}' +
-                '@media (prefers-color-scheme:dark){.card{background:#0e2d3e;color:#eaf4f8}.body{color:#b7cdd7}' +
-                '.num{color:#eaf4f8}.no{background:transparent;border-color:#3d5866;color:#b7cdd7}}' +
-                '</style>' +
-                '<div class="card" role="dialog" aria-modal="false" aria-labelledby="callingly-confirm-title">' +
-                '<p class="title" id="callingly-confirm-title">Call you now?</p>' +
-                '<p class="body">We\'ll ring our ' + escapeHtml(config.team) + ' team and connect them to ' +
-                '<span class="num"></span> in the next minute or two.</p>' +
-                '<div class="row"><button type="button" class="no">Not now</button>' +
-                '<button type="button" class="yes">Call me</button></div></div>';
-
-            root.querySelector('.num').textContent = formatPhone(lead.phone);
-
-            var settled = false;
-
-            function finish(answer) {
-                if (settled) {
-                    return;
-                }
-
-                settled = true;
-                document.removeEventListener('keydown', onKey, true);
-                host.remove();
-                resolve(answer);
-            }
-
-            function onKey(event) {
-                if (event.key === 'Escape') {
-                    finish(false);
-                }
-            }
-
-            root.querySelector('.yes').addEventListener('click', function () {
-                finish(true);
-            });
-            root.querySelector('.no').addEventListener('click', function () {
-                finish(false);
-            });
-            document.addEventListener('keydown', onKey, true);
-
-            if (signal) {
-                signal.addEventListener('abort', function () {
-                    finish(false);
-                });
-            }
-
-            // An unanswered card is a "no": never leave a pending call request
-            // hanging around a page the visitor has moved on from.
-            setTimeout(function () {
-                finish(false);
-            }, 120000);
-
-            document.body.appendChild(host);
-            root.querySelector('.yes').focus();
-        });
-    }
-
     /**
-     * Group a number for display so the visitor can check at a glance that it
-     * is theirs — the one thing the confirmation card exists to let them do.
-     * Only NANP numbers have a grouping worth assuming; anything else is shown
+     * Group a number for display so a person reading the tool's answer can
+     * check at a glance that it is theirs. Only NANP numbers have a grouping worth assuming; anything else is shown
      * exactly as it was given rather than guessed at. Display only: what gets
      * sent is always the number the caller passed.
      */
@@ -307,12 +187,6 @@
         return raw;
     }
 
-    function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, function (character) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
-        });
-    }
-
     /* ------------------------------------------------------------------
      * Tool result helpers
      * ---------------------------------------------------------------- */
@@ -329,7 +203,7 @@
      * What to call the team in a sentence. The page's own label wins when the
      * operator set one: the server knows the team by its internal Callingly
      * name, which can be nothing like what the site calls it, and the tool
-     * descriptions and the confirmation card already use the page's label. A
+     * descriptions already use the page's label. A
      * page that named no team gets the server's name, which beats "sales".
      */
     function teamName(data) {
@@ -428,10 +302,8 @@
             description:
                 'Get the visitor on the phone with this company\'s ' + config.team + ' team now. Callingly rings the ' +
                 'available reps and bridges the first one who picks up to the visitor\'s phone, usually within a ' +
-                'minute. This places a real phone call to a real person: only use it when the visitor has asked to ' +
-                'be called and has given you their own phone number, and pass consent=true to confirm that. ' +
-                'Outside the team\'s calling hours the request is queued and placed when they open. ' +
-                'The visitor is also asked to confirm on the page before the call goes out.',
+                'minute. This places a real phone call to a real person, so use the number the visitor gave you. ' +
+                'Outside the team\'s calling hours the request is queued and placed when they open.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -445,13 +317,9 @@
                     reason: {
                         type: 'string',
                         description: 'What the visitor wants to talk about, in one or two sentences. Shown to the rep before they connect.'
-                    },
-                    consent: {
-                        type: 'boolean',
-                        description: 'True only if the visitor asked to be called on this number. Never assume it.'
                     }
                 },
-                required: ['phone', 'consent']
+                required: ['phone']
             },
             execute: function (input, options) {
                 input = input || {};
@@ -462,13 +330,6 @@
                     return Promise.resolve(failure('A phone number is required. Ask the visitor for the number to call.'));
                 }
 
-                if (input.consent !== true) {
-                    return Promise.resolve(failure(
-                        'Not sent: consent was not given. Ask the visitor whether they want the ' + config.team +
-                        ' team to call them on this number, then retry with consent=true.'
-                    ));
-                }
-
                 var name = splitName(input.name);
 
                 return requestCall({
@@ -477,18 +338,10 @@
                     phone: String(input.phone).trim(),
                     email: input.email || null,
                     company: input.company || null,
-                    comments: input.reason || null,
-                    consent: true
+                    comments: input.reason || null
                 }, { signal: signal }).then(function (data) {
                     return text(relabelTeam(data.message, data) + ' (Callingly is calling ' + formatPhone(data.phone_number) + '.)');
                 }).catch(function (error) {
-                    if (error.declined) {
-                        return failure(
-                            'The visitor did not confirm the call on the page, so nothing was sent. ' +
-                            'Ask them whether they still want to be called before trying again.'
-                        );
-                    }
-
                     return failure('The call could not be requested: ' + error.message);
                 });
             }
