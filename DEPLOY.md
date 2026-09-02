@@ -17,9 +17,18 @@ live availability and a real phone call.
 
 ## Deploying
 
-The live site is a Cloudflare **Pages** project serving `site/` at
-<https://joesplumbing.callingly.com/>. If it is connected to this repo, a push
-to `main` redeploys it and there is nothing else to do:
+The live site is a Cloudflare **Pages** project, created by direct upload, at
+<https://joesplumbing.callingly.com/>. Direct-upload projects do not watch Git,
+so a push to `main` does **not** redeploy — publish it yourself:
+
+```sh
+npm run build:site           # regenerates site/index.html
+npx wrangler pages deploy site --project-name=<project>
+```
+
+Cloudflare cannot add Git integration to an existing Pages project. Making
+pushes deploy on their own means creating a second, Git-connected project and
+moving the custom domain to it:
 
 | Setting | Value |
 | --- | --- |
@@ -27,13 +36,6 @@ to `main` redeploys it and there is nothing else to do:
 | Framework preset | None |
 | Build command | *(leave empty)* |
 | Build output directory | `site` |
-
-A project created by direct upload does **not** watch Git — redeploy it with:
-
-```sh
-npm run build:site           # regenerates site/index.html
-npx wrangler pages deploy site --project-name=<project>
-```
 
 Deliberately no `wrangler.toml` here: Pages reads one from the repo root if it
 finds it, and a config written for a Worker (`[assets]`) makes the build fail.
