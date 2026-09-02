@@ -29,7 +29,7 @@ const arrive = () => {
 async function open(setup) {
     const page = await browser.newPage();
     if (setup) { await page.addInitScript(setup); }
-    await page.goto('http://localhost:8787/demo/copperleaf/', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:8787/demo/joes-plumbing/after/', { waitUntil: 'networkidle' });
 
     return page;
 }

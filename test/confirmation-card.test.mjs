@@ -12,7 +12,7 @@ await page.addInitScript(() => {
     window.__tools = [];
     document.modelContext = { registerTool(t) { window.__tools.push(t); return Promise.resolve(); } };
 });
-await page.goto('http://localhost:8787/demo/copperleaf/', { waitUntil: 'networkidle' });
+await page.goto('http://localhost:8787/demo/joes-plumbing/after/', { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__tools.length >= 2, { timeout: 8000 });
 
 await page.evaluate(() => {

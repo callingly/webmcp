@@ -25,7 +25,7 @@ await page.addInitScript(() => {
     };
 });
 
-await page.goto('http://localhost:8787/demo/copperleaf/', { waitUntil: 'networkidle' });
+await page.goto('http://localhost:8787/demo/joes-plumbing/after/', { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__slow.length >= 2, { timeout: 8000 });
 check('both tools attempted on the slow context', (await page.evaluate(() => window.__slow.length)) === 2);
 

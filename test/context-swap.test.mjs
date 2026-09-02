@@ -26,7 +26,7 @@ await page.addInitScript(() => {
     };
 });
 
-await page.goto('http://localhost:8787/demo/copperleaf/', { waitUntil: 'networkidle' });
+await page.goto('http://localhost:8787/demo/joes-plumbing/after/', { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__a.length >= 2, { timeout: 8000 });
 check('registers against the first context', (await page.evaluate(() => window.__a.length)) === 2);
 check('not reported registered while pending', (await page.evaluate(() => window.callingly.isRegistered())) === false);

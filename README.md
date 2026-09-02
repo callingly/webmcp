@@ -52,12 +52,18 @@ Then open it in a WebMCP-capable browser:
 - **ChatGPT's in-app browser** — WebMCP works out of the box, or
 - **Chrome 149+** with `chrome://flags/#enable-webmcp-testing` enabled.
 
-Two pages are served:
+Three pages are served:
 
 | URL | What it is |
 | --- | --- |
+| <http://localhost:8787/demo/joes-plumbing/before/> | A **fictional plumber's site**, as the web is today. Good design, real phone number, and a contact form that promises a reply "within 1–2 business days". An agent that lands here has nothing to work with. |
+| <http://localhost:8787/demo/joes-plumbing/after/> | The **same file plus one line**. `diff demo/joes-plumbing/{before,after}/index.html` shows exactly one changed row: the script tag. |
 | <http://localhost:8787/> | An **agent console**: the same snippet, plus a live view of which tools registered and every call an agent makes against them, with arguments and return values. |
-| <http://localhost:8787/demo/copperleaf/> | A **fictional customer's site** — a solar installer — with nothing on it but the one script tag, the way a real customer installs it. |
+
+The before/after pair is the whole argument in one `diff`. Nothing else on the
+page changes — the contact form still says 1–2 business days, because the human
+path is not what this replaces. What changes is that an agent can now find out
+whether anyone is free and get the visitor a phone call in the next minute.
 
 Ask your agent things like:
 
@@ -137,7 +143,7 @@ reasoning behind the key model, the rate limits and the field-mapping guard.
 ```
 webmcp.js              The snippet, exactly as production serves it
 demo/index.html        Agent console — tools and live tool calls
-demo/copperleaf/       A fictional customer site with just the script tag
+demo/joes-plumbing/    A fictional customer site, before and after the one line
 demo/server.js         Dependency-free mock API + static server
 server/                The real Laravel implementation, for reading
 test/                  Browser checks for both demo pages
