@@ -158,7 +158,6 @@ demo/index.html        Agent console — tools and live tool calls
 demo/joes-plumbing/    A fictional customer site, before and after the one line
 site/                  Just the "after" page, built for hosting — see DEPLOY.md
 build-site.mjs         Generates site/ from demo/joes-plumbing/after/
-wrangler.toml          Cloudflare config for the hosted page — see DEPLOY.md
 demo/server.js         Dependency-free mock API + static server
 server/                The real Laravel implementation, for reading
 test/                  Browser checks for both demo pages

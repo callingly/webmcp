@@ -17,27 +17,9 @@ live availability and a real phone call.
 
 ## Deploying
 
-The live site is a Cloudflare **Worker with static assets** — `wrangler.toml`
-here, served at <https://joesplumbing.callingly.com/> via a custom domain:
-
-```sh
-npm run build:site   # regenerates site/index.html from demo/joes-plumbing/after/
-npx wrangler deploy  # uploads site/ to the `webmcp` Worker
-```
-
-This is **not** connected to Git, so pushing to `main` does not redeploy it —
-run `wrangler deploy` after any change to the page.
-
-`build:site` fails loudly if `demo/joes-plumbing/after/index.html` no longer
-carries the expected snippet tag, so the two cannot drift apart silently.
-
-Unknown paths 404 by default, which is what we want: no `/before/` or `/after/`
-survives on the deployed origin even though earlier deploys served them.
-
-## Cloudflare Pages instead, connected to this repo
-
-If you would rather have every push to `main` redeploy: Dashboard → Workers &
-Pages → Create → Pages → Connect to Git → `callingly/webmcp`:
+The live site is a Cloudflare **Pages** project serving `site/` at
+<https://joesplumbing.callingly.com/>. If it is connected to this repo, a push
+to `main` redeploys it and there is nothing else to do:
 
 | Setting | Value |
 | --- | --- |
@@ -46,8 +28,21 @@ Pages → Create → Pages → Connect to Git → `callingly/webmcp`:
 | Build command | *(leave empty)* |
 | Build output directory | `site` |
 
-Nothing else to configure — the page is static and the API it calls is
-CORS-open by design.
+A project created by direct upload does **not** watch Git — redeploy it with:
+
+```sh
+npm run build:site           # regenerates site/index.html
+npx wrangler pages deploy site --project-name=<project>
+```
+
+Deliberately no `wrangler.toml` here: Pages reads one from the repo root if it
+finds it, and a config written for a Worker (`[assets]`) makes the build fail.
+
+`build:site` fails loudly if `demo/joes-plumbing/after/index.html` no longer
+carries the expected snippet tag, so the two cannot drift apart silently.
+
+Unknown paths 404, which is what we want: no `/before/` or `/after/` survives
+on the deployed origin even though earlier deploys served them.
 
 ## Locking the key to these origins (optional)
 
