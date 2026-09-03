@@ -154,8 +154,9 @@ The client side has browser checks that drive a stubbed `document.modelContext`
 the way an agent browser would:
 
 ```bash
-npm install     # playwright, for the browser checks only
-npm start &     # in another shell
+npm install                # playwright, for the browser checks only
+npx playwright install     # the browser binary itself
+npm start &                # in another shell
 npm test
 ```
 
